@@ -1,11 +1,44 @@
 import { MetricsSummary, Transaction, EscalationItem } from '../types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const getApiBase = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname || '127.0.0.1';
+    return `http://${hostname}:8000/api/v1`;
+  }
+  return 'http://127.0.0.1:8000/api/v1';
+};
+
+async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
+  const primaryUrl = `${getApiBase()}${endpoint}`;
+  const fallbackUrl = `/api/v1${endpoint}`;
+
+  try {
+    const res = await fetch(primaryUrl, options);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Server returned status ${res.status}`);
+    }
+    return await res.json();
+  } catch (err: any) {
+    // If primary direct fetch failed, try fallback proxy
+    try {
+      const res = await fetch(fallbackUrl, options);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server returned status ${res.status}`);
+      }
+      return await res.json();
+    } catch (fallbackErr: any) {
+      throw new Error(err.message || fallbackErr.message || 'Failed to fetch from backend server.');
+    }
+  }
+}
 
 export async function fetchMetricsSummary(): Promise<MetricsSummary> {
-  const res = await fetch(`${API_BASE}/metrics/summary`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to fetch metrics summary');
-  return res.json();
+  return apiFetch('/metrics/summary', { cache: 'no-store' });
 }
 
 export async function fetchTransactions(params: {
@@ -22,64 +55,48 @@ export async function fetchTransactions(params: {
   if (params.type && params.type !== 'ALL') query.append('type', params.type);
   if (params.search) query.append('search', params.search);
 
-  const res = await fetch(`${API_BASE}/transactions?${query.toString()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to fetch transactions');
-  return res.json();
+  return apiFetch(`/transactions?${query.toString()}`, { cache: 'no-store' });
 }
 
 export async function fetchTransactionById(id: string): Promise<Transaction> {
-  const res = await fetch(`${API_BASE}/transactions/${id}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to fetch transaction details');
-  return res.json();
+  return apiFetch(`/transactions/${id}`, { cache: 'no-store' });
 }
 
 export async function runSingleRecovery(id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/recovery/single-run/${id}`, {
+  return apiFetch(`/recovery/single-run/${id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Failed to execute AI recovery run');
-  return res.json();
 }
 
 export async function runBatchRecovery(limit: number = 20): Promise<any> {
-  const res = await fetch(`${API_BASE}/recovery/batch-run?limit=${limit}`, {
+  return apiFetch(`/recovery/batch-run?limit=${limit}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Failed to execute batch AI recovery');
-  return res.json();
 }
 
 export async function fetchEscalations(): Promise<{ items: EscalationItem[]; count: number }> {
-  const res = await fetch(`${API_BASE}/escalations`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to fetch escalations');
-  return res.json();
+  return apiFetch('/escalations', { cache: 'no-store' });
 }
 
 export async function approveEscalation(actionId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/escalations/${actionId}/approve`, {
+  return apiFetch(`/escalations/${actionId}/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Failed to approve escalation');
-  return res.json();
 }
 
 export async function rejectEscalation(actionId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/escalations/${actionId}/reject`, {
+  return apiFetch(`/escalations/${actionId}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Failed to reject escalation');
-  return res.json();
 }
 
 export async function seedDatabase(count: number = 1000): Promise<any> {
-  const res = await fetch(`${API_BASE}/seed?count=${count}`, {
+  return apiFetch(`/seed?count=${count}&force=true`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Failed to seed database');
-  return res.json();
 }
