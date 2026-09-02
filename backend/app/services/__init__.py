@@ -1,0 +1,1 @@
+from app.services.generator import generate_synthetic_data
