@@ -1,39 +1,21 @@
 import { MetricsSummary, Transaction, EscalationItem } from '../types';
 
-const getApiBase = (): string => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname || '127.0.0.1';
-    return `http://${hostname}:8000/api/v1`;
-  }
-  return 'http://127.0.0.1:8000/api/v1';
-};
+const API_BASE = '/api/v1';
 
 async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
-  const primaryUrl = `${getApiBase()}${endpoint}`;
-  const fallbackUrl = `/api/v1${endpoint}`;
+  const url = `${API_BASE}${endpoint}`;
 
   try {
-    const res = await fetch(primaryUrl, options);
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || `Server returned status ${res.status}`);
+      throw new Error(data.detail || `Server error (Status ${res.status})`);
     }
-    return await res.json();
+    
+    return data;
   } catch (err: any) {
-    // If primary direct fetch failed, try fallback proxy
-    try {
-      const res = await fetch(fallbackUrl, options);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned status ${res.status}`);
-      }
-      return await res.json();
-    } catch (fallbackErr: any) {
-      throw new Error(err.message || fallbackErr.message || 'Failed to fetch from backend server.');
-    }
+    throw new Error(err.message || 'Failed to connect to backend server');
   }
 }
 

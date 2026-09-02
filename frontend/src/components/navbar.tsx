@@ -24,7 +24,7 @@ export function Navbar() {
       showToast(`Database seeded with 1,000 synthetic records!`);
       window.location.reload();
     } catch (e: any) {
-      showToast(`Failed: ${e.message}. Is FastAPI running on port 8000?`);
+      showToast(`Seeding Error: ${e.message}`);
     } finally {
       setLoadingSeed(false);
     }
@@ -37,7 +37,7 @@ export function Navbar() {
       showToast(res.message || `Processed ${res.processed_count} at-risk transactions!`);
       window.location.reload();
     } catch (e: any) {
-      showToast(`Failed: ${e.message}. Is FastAPI running on port 8000?`);
+      showToast(`Agent Error: ${e.message}`);
     } finally {
       setLoadingBatch(false);
     }
