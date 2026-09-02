@@ -23,6 +23,24 @@ class AIRecoveryAgent:
            DETECT -> DIAGNOSE -> DECIDE -> ACT -> VERIFY -> MEASURE
         """
         cust: CustomerDB = tx.customer
+        if not cust:
+            cust = CustomerDB(
+                id=tx.customer_id or str(uuid.uuid4()),
+                name="Rohan Sharma",
+                email="rohan.sharma@example.com",
+                phone="+919876543210",
+                risk_score=0.2,
+                clv_tier=CLVTier.REGULAR
+            )
+
+        if not merchant:
+            merchant = MerchantDB(
+                id=tx.merchant_id or str(uuid.uuid4()),
+                name="RazorPay TechMerchants India",
+                email="finance@techmerchants.in",
+                max_retries=2,
+                max_contact_attempts=3
+            )
         
         # Step 1: DETECT Log
         audit_detect = AuditLogDB(

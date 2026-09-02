@@ -2,7 +2,7 @@ import random
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from app.models.schemas import (
     MerchantDB, CustomerDB, TransactionDB, RecoveryDecisionDB, RecoveryActionDB, AuditLogDB,
     TransactionType, TransactionStatus, FailureCategory, RecoveryActionType, ActionStatus, CLVTier
@@ -44,14 +44,24 @@ PAYMENT_FAILURE_CODES = {
     ]
 }
 
-async def generate_synthetic_data(db: AsyncSession, count: int = 1000) -> dict:
+async def generate_synthetic_data(db: AsyncSession, count: int = 1000, force: bool = False) -> dict:
     """Generate 1000+ synthetic transactions with complete realistic lifecycle audit logs."""
     
-    # Check if already seeded
-    result = await db.execute(select(func.count(TransactionDB.id)))
-    existing_count = result.scalar()
-    if existing_count and existing_count >= count:
-        return {"message": f"Database already contains {existing_count} transactions.", "seeded_count": 0}
+    if force:
+        # Clear existing tables for fresh clean demo dataset
+        await db.execute(delete(AuditLogDB))
+        await db.execute(delete(RecoveryActionDB))
+        await db.execute(delete(RecoveryDecisionDB))
+        await db.execute(delete(TransactionDB))
+        await db.execute(delete(CustomerDB))
+        await db.execute(delete(MerchantDB))
+        await db.commit()
+    else:
+        # Check if already seeded
+        result = await db.execute(select(func.count(TransactionDB.id)))
+        existing_count = result.scalar()
+        if existing_count and existing_count >= count:
+            return {"message": f"Database already contains {existing_count} transactions.", "seeded_count": 0}
 
     # 1. Create Default Merchant
     merchant = MerchantDB(
@@ -82,16 +92,15 @@ async def generate_synthetic_data(db: AsyncSession, count: int = 1000) -> dict:
     
     await db.flush()
 
-    # 3. Create 1,000 Transactions
+    # 3. Create Transactions (50% AT_RISK, 30% RECOVERED, 10% IN_RECOVERY, 5% ESCALATED, 5% FAILED_PERMANENT)
     now = datetime.utcnow()
     transactions = []
     
-    # Status distribution: 40% AT_RISK, 35% RECOVERED, 10% IN_RECOVERY, 10% ESCALATED, 5% FAILED_PERMANENT
     status_weights = [
-        (TransactionStatus.AT_RISK, 0.40),
-        (TransactionStatus.RECOVERED, 0.35),
+        (TransactionStatus.AT_RISK, 0.50),
+        (TransactionStatus.RECOVERED, 0.30),
         (TransactionStatus.IN_RECOVERY, 0.10),
-        (TransactionStatus.ESCALATED, 0.10),
+        (TransactionStatus.ESCALATED, 0.05),
         (TransactionStatus.FAILED_PERMANENT, 0.05),
     ]
     
@@ -109,7 +118,6 @@ async def generate_synthetic_data(db: AsyncSession, count: int = 1000) -> dict:
         
         status = random.choice(status_choices)
         
-        # Vary transaction amounts logically by type
         if tx_type == TransactionType.INVOICE_OVERDUE:
             amount = round(random.uniform(15000, 150000), 2)
         elif tx_type == TransactionType.SUBSCRIPTION_FAILURE:
@@ -145,7 +153,7 @@ async def generate_synthetic_data(db: AsyncSession, count: int = 1000) -> dict:
         transactions.append(tx)
         db.add(tx)
 
-        # Generate realistic decision & audit log for processed transactions
+        # Generate realistic decision & audit log for non-pending transactions
         if status != TransactionStatus.AT_RISK:
             rec_score = round(random.uniform(0.65, 0.98), 2) if status == TransactionStatus.RECOVERED else round(random.uniform(0.2, 0.55), 2)
             
